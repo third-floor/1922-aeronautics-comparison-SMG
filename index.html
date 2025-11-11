@@ -163,7 +163,7 @@
         "uid", "identifier", "title", "description", "category",
         "material", "object_name", "date", "place", "maker", "image"
       ];
-      const metrics = ["ObjectNames", "Makers", "Materials", "Dates", "Places", "Descriptions", "Other"];
+      const metrics = ["ObjectNames", "Makers", "Organisations/institutions", "Dates", "Places", "Descriptions", "Other"];
 
       let activeChart = null;
 
@@ -282,8 +282,14 @@
         // Radar chart
         const ctx = document.getElementById('spiderChart');
         if (comp) {
-          const meteorologyValues = metrics.map(m => Number(comp[`Meteorology_${m}`] || 0));
-          const smgValues = metrics.map(m => Number(comp[`SMG_${m}`] || 0));
+          const meteorologyValues = metrics.map(m => {
+            const key = `Meteorology_${m}`.replace(/\//g, '_');
+            return Number(comp[key] || 0);
+          });
+          const smgValues = metrics.map(m => {
+            const key = `SMG_${m}`.replace(/\//g, '_');
+            return Number(comp[key] || 0);
+          });
           const entryMax = Math.max(...meteorologyValues, ...smgValues, 1);
 
           activeChart = new Chart(ctx, {
