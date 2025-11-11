@@ -123,13 +123,25 @@
         new Promise(res => Papa.parse('entity_comparison_results.csv', {download: true, header: true, complete: r => res(r.data.filter(d => Object.keys(d).length > 1))}))
       ]);
 
+      // ---- Custom sorting for Catalogue number ----
+      jQuery.extend(jQuery.fn.dataTable.ext.type.order, {
+        "catalogue-pre": function (data) {
+          const num = parseFloat(String(data).replace(/[^\d.]/g, ''));
+          return isNaN(num) ? 0 : num;
+        }
+      });
+
       const visibleColumns = [
         "Catalogue number", "Object name", "Object/Inventory number",
         "uid", "identifier", "title"
       ];
       const columns = Object.keys(recordsData[0])
         .filter(k => visibleColumns.includes(k))
-        .map(k => ({ title: k, data: k }));
+        .map(k => ({
+          title: k,
+          data: k,
+          type: k === "Catalogue number" ? "catalogue" : "string"
+        }));
 
       const table = $('#recordsTable').DataTable({
         data: recordsData,
@@ -200,17 +212,16 @@
             let val = rowData[k] || '';
 
             if (k === 'image' && val) {
-            val = `<a href="${val}" target="_blank">View image 🔗</a>`;
-          }
-          
+              val = `<a href="${val}" target="_blank">View image 🔗</a>`;
+            }
+
             if (k === 'uid' && val) {
               const baseUrl = 'https://collection.sciencemuseumgroup.org.uk/objects/';
               val = `<a href="${baseUrl}${val}" target="_blank">${val}</a>`;
-          }
+            }
 
             rightHTML += `<div class="field-row"><strong>${k}</strong><span>${val}</span></div>`;
-        }
-
+          }
         });
 
         // Unique SMG
@@ -230,6 +241,7 @@
         }
         rightHTML += `</div>`;
 
+        // Modal HTML
         const modalHTML = `
           <div class="modal fade" id="compareModal" tabindex="-1">
             <div class="modal-dialog modal-xl modal-dialog-scrollable">
@@ -241,6 +253,13 @@
                 <div class="modal-body text-center">
                   ${chartHTML}
                   <div class="dual-panel">${leftHTML + rightHTML}</div>
+                  <div class="mt-4">
+                    <h6>🖼️ Related Image</h6>
+                    <img id="recordImage" src="pages/${rowData["Filename"]}" 
+                         alt="${rowData["Object name"] || ''}" 
+                         class="img-fluid rounded shadow-sm" 
+                         style="max-height:400px; cursor:pointer;">
+                  </div>
                 </div>
               </div>
             </div>
@@ -252,6 +271,7 @@
         const modal = new bootstrap.Modal(document.getElementById('compareModal'));
         modal.show();
 
+        // destroy chart when modal closes
         document.getElementById('compareModal').addEventListener('hidden.bs.modal', () => {
           if (activeChart) {
             activeChart.destroy();
@@ -259,11 +279,12 @@
           }
         });
 
+        // Radar chart
         const ctx = document.getElementById('spiderChart');
         if (comp) {
           const meteorologyValues = metrics.map(m => Number(comp[`Meteorology_${m}`] || 0));
           const smgValues = metrics.map(m => Number(comp[`SMG_${m}`] || 0));
-          const entryMax = Math.max(...meteorologyValues, ...smgValues, 1); // ✅ dynamic scaling
+          const entryMax = Math.max(...meteorologyValues, ...smgValues, 1);
 
           activeChart = new Chart(ctx, {
             type: 'radar',
@@ -299,7 +320,7 @@
               scales: {
                 r: {
                   beginAtZero: true,
-                  max: entryMax + 1, // ✅ dynamic max
+                  max: entryMax + 1,
                   ticks: { stepSize: Math.ceil(entryMax / 4), color: '#555', backdropColor: 'transparent' },
                   grid: { color: '#ddd' },
                   angleLines: { color: '#ccc' }
@@ -318,11 +339,50 @@
         } else {
           ctx.parentElement.innerHTML = "<p class='text-muted fst-italic'>⚠️ No comparison data found for this record.</p>";
         }
+
+        // ---- Image fullscreen + navigation ----
+        const allFiles = recordsData.map(r => r["Filename"]).filter(f => f);
+        let currentIndex = allFiles.indexOf(rowData["Filename"]);
+
+        $('#recordImage').on('click', function() {
+          const overlay = $(`
+            <div id="imgOverlay" style="
+              position:fixed;top:0;left:0;width:100%;height:100%;
+              background:rgba(0,0,0,0.9);z-index:9999;
+              display:flex;align-items:center;justify-content:center;">
+              <img id="overlayImg" src="pages/${allFiles[currentIndex]}" 
+                   style="max-width:90%;max-height:90%;border-radius:10px;">
+              <button id="prevImg" class="btn btn-light position-absolute top-50 start-0 translate-middle-y ms-3">⟨</button>
+              <button id="nextImg" class="btn btn-light position-absolute top-50 end-0 translate-middle-y me-3">⟩</button>
+            </div>
+          `).appendTo('body');
+
+          const updateImg = () => {
+            $('#overlayImg').attr('src', `pages/${allFiles[currentIndex]}`);
+          };
+
+          $('#prevImg').on('click', () => {
+            currentIndex = (currentIndex - 1 + allFiles.length) % allFiles.length;
+            updateImg();
+          });
+
+          $('#nextImg').on('click', () => {
+            currentIndex = (currentIndex + 1) % allFiles.length;
+            updateImg();
+          });
+
+          $('#imgOverlay').on('click', e => {
+            if (e.target.id === 'imgOverlay') $('#imgOverlay').remove();
+          });
+
+          $(document).on('keydown.overlay', e => {
+            if (e.key === 'Escape') $('#imgOverlay').remove();
+            if (e.key === 'ArrowLeft') $('#prevImg').click();
+            if (e.key === 'ArrowRight') $('#nextImg').click();
+          });
+        });
       });
     });
   </script>
 </body>
 </html>
-
-
-
